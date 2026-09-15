@@ -134,9 +134,10 @@
   }
   #overlay.hidden { display: none; }
   #overlay .big {
-    font-size: 26px;
+    font-size: 34px;
     font-weight: 800;
-    letter-spacing: 2px;
+    letter-spacing: 3px;
+    color: var(--accent);
   }
   #overlay .big.win { color: var(--good); }
   #overlay .sub { color: var(--dim); font-size: 14px; line-height: 1.6; }
@@ -145,12 +146,13 @@
     background: var(--accent);
     color: #0d1117;
     border: none;
-    padding: 10px 28px;
-    border-radius: 8px;
-    font-size: 15px;
-    font-weight: 700;
+    padding: 14px 44px;
+    border-radius: 10px;
+    font-size: 18px;
+    font-weight: 800;
     cursor: pointer;
-    letter-spacing: .5px;
+    letter-spacing: 1px;
+    box-shadow: 0 4px 18px rgba(88,166,255,.35);
   }
   #overlay button:hover { filter: brightness(1.15); }
   #overlay .newbest { color: var(--warn); font-size: 14px; font-weight: 700; }
@@ -197,16 +199,15 @@
     <div id="overlay">
       <div class="big" id="ovTitle">MAZE RUNNER</div>
       <div class="sub" id="ovSub">
-        Reach the <b>green exit</b> before time runs out.<br>
-        <b>WASD / Arrows</b> to move · <b>swipe</b> on mobile<br>
-        Toggle <b>fog of war</b> to hide what you haven't seen.
+        Reach the <b>green exit</b> — fastest time wins.<br>
+        <b>WASD / Arrows</b> to move · <b>swipe</b> on mobile
       </div>
       <div class="newbest hidden" id="ovNewBest">★ NEW BEST TIME ★</div>
-      <button id="ovBtn">START</button>
+      <button id="ovBtn">PLAY</button>
     </div>
   </div>
 
-  <div class="hint">← ↑ ↓ → / WASD · swipe · N = new maze · F = fog · M = minimap</div>
+  <div class="hint">← ↑ ↓ → / WASD · swipe · N = new maze · F = fog · M = minimap · auto-pauses when tab is hidden</div>
   <footer>
     More free pixel-art tools &amp; games at
     <a href="https://pennypenguinapp-beep.github.io/" target="_blank" rel="noopener">pennypenguinapp-beep.github.io</a>
@@ -260,6 +261,33 @@
   const miniToggle = document.getElementById('miniToggle');
   const newBtn = document.getElementById('newBtn');
   const restartBtn = document.getElementById('restartBtn');
+
+  // ---------- Audio (WebAudio, no files) ----------
+  let audioCtx = null;
+  function ac() {
+    if (!audioCtx) {
+      try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; }
+    }
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+    return audioCtx;
+  }
+  function beep(freq, dur, type, vol, when) {
+    const a = ac();
+    if (!a) return;
+    try {
+      const t0 = a.currentTime + (when || 0);
+      const o = a.createOscillator();
+      const g = a.createGain();
+      o.type = type || 'square';
+      o.frequency.value = freq;
+      g.gain.setValueAtTime(vol || 0.05, t0);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      o.connect(g); g.connect(a.destination);
+      o.start(t0); o.stop(t0 + dur + 0.02);
+    } catch (e) {}
+  }
+  function sfxMove() { beep(220, 0.05, 'square', 0.025); }
+  function sfxWin() { beep(523, 0.12, 'square', 0.06); beep(659, 0.12, 'square', 0.06, 0.12); beep(784, 0.22, 'square', 0.06, 0.24); }
 
   // ---------- Persistence ----------
   function loadBests() {
@@ -330,14 +358,14 @@
     const cfg = SIZES[sizeKey];
     cols = cfg.cols; rows = cfg.rows; cell = cfg.cell;
 
-    // Fit canvas to stage
+    // Fit canvas to stage (letterbox)
     const stage = document.getElementById('stage');
-    const maxW = Math.min(stage.clientWidth - 16, 500);
-    const maxH = Math.min(stage.clientHeight - 16, 500);
-    let px = cols * cell;
-    let py = rows * cell;
-    const scale = Math.min(maxW / px, maxH / py, 1);
-    cell = Math.max(6, Math.floor(cell * scale));
+    const maxW = Math.max(120, stage.clientWidth - 16);
+    const maxH = Math.max(120, stage.clientHeight - 16);
+    const px = cols * cell;
+    const py = rows * cell;
+    const scale = Math.min(maxW / px, maxH / py);
+    cell = Math.max(4, Math.floor(cell * scale));
     canvas.width = cols * cell;
     canvas.height = rows * cell;
 
@@ -376,6 +404,7 @@
     player.y += dy;
     revealAround(player.x, player.y);
     spawnMoveParticles(dx, dy);
+    sfxMove();
     if (player.x === exitCell.x && player.y === exitCell.y) {
       win();
     }
@@ -429,6 +458,7 @@
     ovNewBest.classList.toggle('hidden', !isNewBest);
     ovBtn.textContent = 'PLAY AGAIN';
     overlay.classList.remove('hidden');
+    sfxWin();
   }
 
   // ---------- Drawing ----------
@@ -575,6 +605,7 @@
       elapsed = (performance.now() - startTime) / 1000;
       timerEl.textContent = fmtTime(elapsed);
     }
+    if (document.hidden) { requestAnimationFrame(loop); return; } // skip work while tab hidden
     updateParticles(dt);
     draw();
     requestAnimationFrame(loop);
@@ -620,16 +651,49 @@
     if (e.key === 'n' || e.key === 'N') { newMaze(); return; }
     if (e.key === 'f' || e.key === 'F') { fogToggle.checked = !fogToggle.checked; fogOn = fogToggle.checked; draw(); return; }
     if (e.key === 'm' || e.key === 'M') { miniToggle.checked = !miniToggle.checked; miniOn = miniToggle.checked; drawMini(); return; }
+    if (e.key === 'Enter' || e.key === ' ') {
+      if (!running && !overlay.classList.contains('hidden')) {
+        e.preventDefault();
+        if (pausedAt) {
+          startTime += performance.now() - pausedAt;
+          pausedAt = 0;
+          running = true;
+          overlay.classList.add('hidden');
+        } else {
+          startGame();
+        }
+        return;
+      }
+    }
     const d = keyMap[e.code];
     if (d) {
       e.preventDefault();
       tryMove(d[0], d[1]);
     }
-    if (e.key === 'Enter' && !running) {
-      if (overlay.classList.contains('hidden')) return;
-      startGame();
+  });
+
+  // ---------- Pause on tab hidden ----------
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      if (running) {
+        running = false;
+        pausedAt = performance.now();
+        ovTitle.textContent = 'PAUSED';
+        ovTitle.className = 'big';
+        ovSub.innerHTML = 'Switch back to this tab to continue.';
+        ovNewBest.classList.add('hidden');
+        ovBtn.textContent = 'RESUME';
+        overlay.classList.remove('hidden');
+      }
+    } else if (pausedAt) {
+      // resume: shift startTime so elapsed is preserved
+      startTime += performance.now() - pausedAt;
+      pausedAt = 0;
+      running = true;
+      overlay.classList.add('hidden');
     }
   });
+  let pausedAt = 0;
 
   // ---------- Input: swipe ----------
   let touchStartX = 0, touchStartY = 0, touchTracking = false;
@@ -660,6 +724,20 @@
     }
   }, { passive: true });
 
+  // Tap on canvas to start/resume when overlay is showing
+  canvas.addEventListener('click', () => {
+    if (!running && !overlay.classList.contains('hidden')) {
+      if (pausedAt) {
+        startTime += performance.now() - pausedAt;
+        pausedAt = 0;
+        running = true;
+        overlay.classList.add('hidden');
+      } else {
+        startGame();
+      }
+    }
+  });
+
   // ---------- Buttons ----------
   sizeSelect.addEventListener('change', () => {
     sizeKey = sizeSelect.value;
@@ -671,28 +749,37 @@
   restartBtn.addEventListener('click', restartMaze);
   ovBtn.addEventListener('click', () => {
     if (running) return;
-    startGame();
+    if (pausedAt) {
+      // resume from pause
+      startTime += performance.now() - pausedAt;
+      pausedAt = 0;
+      running = true;
+      overlay.classList.add('hidden');
+    } else {
+      startGame();
+    }
   });
 
-  // ---------- Resize ----------
-  window.addEventListener('resize', () => {
-    // Re-fit canvas without regenerating maze
+  // ---------- Resize (letterbox to fit window) ----------
+  function fitCanvas() {
     const cfg = SIZES[sizeKey];
     const stage = document.getElementById('stage');
-    const maxW = Math.min(stage.clientWidth - 16, 500);
-    const maxH = Math.min(stage.clientHeight - 16, 500);
+    const maxW = Math.max(120, stage.clientWidth - 16);
+    const maxH = Math.max(120, stage.clientHeight - 16);
     const baseCell = cfg.cell;
-    let px = cols * baseCell;
-    let py = rows * baseCell;
-    const scale = Math.min(maxW / px, maxH / py, 1);
-    cell = Math.max(6, Math.floor(baseCell * scale));
+    const px = cols * baseCell;
+    const py = rows * baseCell;
+    const scale = Math.min(maxW / px, maxH / py);
+    cell = Math.max(4, Math.floor(baseCell * scale));
     canvas.width = cols * cell;
     canvas.height = rows * cell;
     draw();
-  });
+  }
+  window.addEventListener('resize', fitCanvas);
 
   // ---------- Init ----------
   setup();
+  fitCanvas();
   requestAnimationFrame((ts) => { lastTime = ts; loop(ts); });
 })();
 </script>
