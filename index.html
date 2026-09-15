@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Maze Runner — LaunchTower</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --dim: #8b949e;
+    --accent: #58a6ff;
+    --good: #3fb950;
+    --warn: #d29922;
+    --bad: #f85149;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    overflow: hidden;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    max-width: 520px;
+    margin: 0 auto;
+    padding: 10px;
+    gap: 8px;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  h1 {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--accent);
+  }
+  h1 span { color: var(--dim); font-weight: 400; font-size: 12px; margin-left: 6px; }
+  .stats {
+    display: flex;
+    gap: 10px;
+    font-size: 13px;
+    color: var(--dim);
+    align-items: center;
+  }
+  .stats b { color: var(--text); font-variant-numeric: tabular-nums; }
+  .stats .best { color: var(--good); }
+  .controls {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .controls button, .controls label {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+  }
+  .controls button:hover, .controls label:hover { border-color: var(--accent); }
+  .controls button.active { background: #1f6feb33; border-color: var(--accent); color: var(--accent); }
+  .controls select {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 8px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .controls .toggle {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .controls .toggle input { accent-color: var(--accent); cursor: pointer; }
+  #stage {
+    position: relative;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+  }
+  canvas {
+    display: block;
+    border-radius: 8px;
+    background: #0a0e14;
+    box-shadow: 0 0 0 1px var(--border), 0 8px 30px rgba(0,0,0,.5);
+  }
+  #minimap {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: rgba(10,14,20,.85);
+    image-rendering: pixelated;
+  }
+  #overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(13,17,23,.88);
+    backdrop-filter: blur(3px);
+    border-radius: 8px;
+    z-index: 10;
+    gap: 12px;
+    text-align: center;
+    padding: 20px;
+  }
+  #overlay.hidden { display: none; }
+  #overlay .big {
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: 2px;
+  }
+  #overlay .big.win { color: var(--good); }
+  #overlay .sub { color: var(--dim); font-size: 14px; line-height: 1.6; }
+  #overlay .sub b { color: var(--text); }
+  #overlay button {
+    background: var(--accent);
+    color: #0d1117;
+    border: none;
+    padding: 10px 28px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: .5px;
+  }
+  #overlay button:hover { filter: brightness(1.15); }
+  #overlay .newbest { color: var(--warn); font-size: 14px; font-weight: 700; }
+  footer {
+    text-align: center;
+    font-size: 11px;
+    color: var(--dim);
+    padding: 2px 0 4px;
+  }
+  footer a { color: var(--accent); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+  .hint { font-size: 11px; color: var(--dim); text-align: center; }
+  @media (max-width: 480px) {
+    h1 { font-size: 15px; }
+    .controls button, .controls label, .controls select { padding: 5px 9px; font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>MAZE RUNNER <span>by LaunchTower</span></h1>
+    <div class="stats">
+      <div>⏱ <b id="timer">0.0</b>s</div>
+      <div>Best <span id="sizeLabel">S</span>: <b class="best" id="best">—</b></div>
+    </div>
+  </header>
+
+  <div class="controls">
+    <select id="sizeSelect" title="Maze size">
+      <option value="S">Small 15×15</option>
+      <option value="M" selected>Medium 25×25</option>
+      <option value="L">Large 41×41</option>
+    </select>
+    <label class="toggle"><input type="checkbox" id="fogToggle" checked> Fog of war</label>
+    <label class="toggle"><input type="checkbox" id="miniToggle" checked> Minimap</label>
+    <button id="newBtn">New Maze</button>
+    <button id="restartBtn">Restart</button>
+  </div>
+
+  <div id="stage">
+    <canvas id="game"></canvas>
+    <canvas id="minimap" width="100" height="100"></canvas>
+    <div id="overlay">
+      <div class="big" id="ovTitle">MAZE RUNNER</div>
+      <div class="sub" id="ovSub">
+        Reach the <b>green exit</b> before time runs out.<br>
+        <b>WASD / Arrows</b> to move · <b>swipe</b> on mobile<br>
+        Toggle <b>fog of war</b> to hide what you haven't seen.
+      </div>
+      <div class="newbest hidden" id="ovNewBest">★ NEW BEST TIME ★</div>
+      <button id="ovBtn">START</button>
+    </div>
+  </div>
+
+  <div class="hint">← ↑ ↓ → / WASD · swipe · N = new maze · F = fog · M = minimap</div>
+  <footer>
+    More free pixel-art tools &amp; games at
+    <a href="https://pennypenguinapp-beep.github.io/" target="_blank" rel="noopener">pennypenguinapp-beep.github.io</a>
+  </footer>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ---------- Config ----------
+  const SIZES = {
+    S: { cols: 15, rows: 15, cell: 32, label: 'S' },
+    M: { cols: 25, rows: 25, cell: 20, label: 'M' },
+    L: { cols: 41, rows: 41, cell: 12, label: 'L' },
+  };
+  const FOG_RADIUS = 3.2; // cells of visibility around player
+  const LS_KEY = 'launchtower_maze_runner_best_v1';
+
+  // ---------- State ----------
+  let sizeKey = 'M';
+  let cols, rows, cell;
+  let walls;        // walls[y][x] = {top,right,bottom,left} booleans
+  let exitCell;     // {x, y}
+  let player = { x: 0, y: 0 };
+  let seen;         // seen[y][x] = 1 if revealed
+  let fogOn = true;
+  let miniOn = true;
+  let running = false;
+  let startTime = 0;
+  let elapsed = 0;
+  let bests = loadBests();
+  let animT = 0;
+  let particles = [];
+
+  // ---------- DOM ----------
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const miniCanvas = document.getElementById('minimap');
+  const mctx = miniCanvas.getContext('2d');
+  const overlay = document.getElementById('overlay');
+  const ovTitle = document.getElementById('ovTitle');
+  const ovSub = document.getElementById('ovSub');
+  const ovBtn = document.getElementById('ovBtn');
+  const ovNewBest = document.getElementById('ovNewBest');
+  const timerEl = document.getElementById('timer');
+  const bestEl = document.getElementById('best');
+  const sizeLabelEl = document.getElementById('sizeLabel');
+  const sizeSelect = document.getElementById('sizeSelect');
+  const fogToggle = document.getElementById('fogToggle');
+  const miniToggle = document.getElementById('miniToggle');
+  const newBtn = document.getElementById('newBtn');
+  const restartBtn = document.getElementById('restartBtn');
+
+  // ---------- Persistence ----------
+  function loadBests() {
+    try {
+      const raw = localStorage.getItem(LS_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    return {};
+  }
+  function saveBests() {
+    try { localStorage.setItem(LS_KEY, JSON.stringify(bests)); } catch (e) {}
+  }
+  function fmtTime(t) { return t.toFixed(1); }
+  function updateBestDisplay() {
+    const b = bests[sizeKey];
+    bestEl.textContent = b ? fmtTime(b) + 's' : '—';
+    sizeLabelEl.textContent = sizeKey;
+  }
+
+  // ---------- Maze generation (recursive backtracker) ----------
+  function generateMaze(c, r) {
+    const w = [];
+    for (let y = 0; y < r; y++) {
+      const row = [];
+      for (let x = 0; x < c; x++) {
+        row.push({ top: true, right: true, bottom: true, left: true });
+      }
+      w.push(row);
+    }
+    const visited = Array.from({ length: r }, () => new Array(c).fill(false));
+    const stack = [{ x: 0, y: 0 }];
+    visited[0][0] = true;
+    while (stack.length) {
+      const cur = stack[stack.length - 1];
+      const { x, y } = cur;
+      const dirs = [];
+      if (y > 0 && !visited[y - 1][x]) dirs.push({ dx: 0, dy: -1, wall: 'top', opp: 'bottom' });
+      if (x < c - 1 && !visited[y][x + 1]) dirs.push({ dx: 1, dy: 0, wall: 'right', opp: 'left' });
+      if (y < r - 1 && !visited[y + 1][x]) dirs.push({ dx: 0, dy: 1, wall: 'bottom', opp: 'top' });
+      if (x > 0 && !visited[y][x - 1]) dirs.push({ dx: -1, dy: 0, wall: 'left', opp: 'right' });
+      if (!dirs.length) { stack.pop(); continue; }
+      const d = dirs[Math.floor(Math.random() * dirs.length)];
+      const nx = x + d.dx, ny = y + d.dy;
+      w[y][x][d.wall] = false;
+      w[ny][nx][d.opp] = false;
+      visited[ny][nx] = true;
+      stack.push({ x: nx, y: ny });
+    }
+    // Knock out a few extra walls to create loops (feels less like a dead-end maze)
+    const extra = Math.floor(c * r * 0.04);
+    for (let i = 0; i < extra; i++) {
+      const x = Math.floor(Math.random() * c);
+      const y = Math.floor(Math.random() * r);
+      const opts = [];
+      if (x < c - 1 && w[y][x].right) opts.push(['right', x, y, 'left', x + 1, y]);
+      if (y < r - 1 && w[y][x].bottom) opts.push(['bottom', x, y, 'top', x, y + 1]);
+      if (opts.length) {
+        const o = opts[Math.floor(Math.random() * opts.length)];
+        w[o[1]][o[2]][o[0]] = false;
+        w[o[5]][o[4]][o[3]] = false;
+      }
+    }
+    return w;
+  }
+
+  // ---------- Setup ----------
+  function setup() {
+    const cfg = SIZES[sizeKey];
+    cols = cfg.cols; rows = cfg.rows; cell = cfg.cell;
+
+    // Fit canvas to stage
+    const stage = document.getElementById('stage');
+    const maxW = Math.min(stage.clientWidth - 16, 500);
+    const maxH = Math.min(stage.clientHeight - 16, 500);
+    let px = cols * cell;
+    let py = rows * cell;
+    const scale = Math.min(maxW / px, maxH / py, 1);
+    cell = Math.max(6, Math.floor(cell * scale));
+    canvas.width = cols * cell;
+    canvas.height = rows * cell;
+
+    walls = generateMaze(cols, rows);
+    exitCell = { x: cols - 1, y: rows - 1 };
+    player = { x: 0, y: 0 };
+    seen = Array.from({ length: rows }, () => new Array(cols).fill(0));
+    revealAround(player.x, player.y);
+    particles = [];
+    elapsed = 0;
+    updateBestDisplay();
+    draw();
+    drawMini();
+  }
+
+  function revealAround(px, py) {
+    const r = FOG_RADIUS;
+    for (let dy = -Math.ceil(r); dy <= Math.ceil(r); dy++) {
+      for (let dx = -Math.ceil(r); dx <= Math.ceil(r); dx++) {
+        const nx = px + dx, ny = py + dy;
+        if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+        if (dx * dx + dy * dy <= r * r) seen[ny][nx] = 1;
+      }
+    }
+  }
+
+  // ---------- Movement ----------
+  function tryMove(dx, dy) {
+    if (!running) return;
+    const cur = walls[player.y][player.x];
+    if (dx === 1 && cur.right) return;
+    if (dx === -1 && cur.left) return;
+    if (dy === 1 && cur.bottom) return;
+    if (dy === -1 && cur.top) return;
+    player.x += dx;
+    player.y += dy;
+    revealAround(player.x, player.y);
+    spawnMoveParticles(dx, dy);
+    if (player.x === exitCell.x && player.y === exitCell.y) {
+      win();
+    }
+    draw();
+    drawMini();
+  }
+
+  // ---------- Particles (subtle trail) ----------
+  function spawnMoveParticles(dx, dy) {
+    const cx = (player.x + 0.5) * cell;
+    const cy = (player.y + 0.5) * cell;
+    for (let i = 0; i < 4; i++) {
+      particles.push({
+        x: cx - dx * cell * 0.3 + (Math.random() - 0.5) * cell * 0.4,
+        y: cy - dy * cell * 0.3 + (Math.random() - 0.5) * cell * 0.4,
+        vx: -dx * (20 + Math.random() * 30),
+        vy: -dy * (20 + Math.random() * 30),
+        life: 0.5 + Math.random() * 0.3,
+        maxLife: 0.8,
+        size: 2 + Math.random() * 3,
+      });
+    }
+  }
+
+  function updateParticles(dt) {
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.life -= dt;
+      if (p.life <= 0) { particles.splice(i, 1); continue; }
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vx *= 0.92;
+      p.vy *= 0.92;
+    }
+  }
+
+  // ---------- Win ----------
+  function win() {
+    running = false;
+    const t = elapsed;
+    let isNewBest = false;
+    if (!bests[sizeKey] || t < bests[sizeKey]) {
+      bests[sizeKey] = t;
+      saveBests();
+      isNewBest = true;
+    }
+    updateBestDisplay();
+    ovTitle.textContent = 'MAZE SOLVED!';
+    ovTitle.className = 'big win';
+    ovSub.innerHTML = 'Time: <b>' + fmtTime(t) + 's</b> on <b>' + sizeKey + '</b><br>Best: <b>' + fmtTime(bests[sizeKey]) + 's</b>';
+    ovNewBest.classList.toggle('hidden', !isNewBest);
+    ovBtn.textContent = 'PLAY AGAIN';
+    overlay.classList.remove('hidden');
+  }
+
+  // ---------- Drawing ----------
+  function draw() {
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    // Background grid (subtle)
+    ctx.fillStyle = '#0a0e14';
+    ctx.fillRect(0, 0, W, H);
+
+    // Cells
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        const cx = x * cell, cy = y * cell;
+        const isVisible = !fogOn || seen[y][x];
+
+        if (isVisible) {
+          // Floor
+          ctx.fillStyle = (x + y) % 2 === 0 ? '#141a24' : '#11161f';
+          ctx.fillRect(cx, cy, cell, cell);
+
+          // Walls
+          ctx.strokeStyle = '#3d4a5c';
+          ctx.lineWidth = Math.max(2, cell * 0.12);
+          ctx.lineCap = 'round';
+          const w = walls[y][x];
+          ctx.beginPath();
+          if (w.top) { ctx.moveTo(cx, cy); ctx.lineTo(cx + cell, cy); }
+          if (w.right) { ctx.moveTo(cx + cell, cy); ctx.lineTo(cx + cell, cy + cell); }
+          if (w.bottom) { ctx.moveTo(cx, cy + cell); ctx.lineTo(cx + cell, cy + cell); }
+          if (w.left) { ctx.moveTo(cx, cy); ctx.lineTo(cx, cy + cell); }
+          ctx.stroke();
+        } else {
+          // Fog cell
+          ctx.fillStyle = '#080b10';
+          ctx.fillRect(cx, cy, cell, cell);
+        }
+      }
+    }
+
+    // Exit (pulsing green)
+    const ex = (exitCell.x + 0.5) * cell;
+    const ey = (exitCell.y + 0.5) * cell;
+    const pulse = 0.6 + 0.4 * Math.sin(animT * 4);
+    ctx.fillStyle = 'rgba(63,185,80,' + (0.25 * pulse) + ')';
+    ctx.beginPath();
+    ctx.arc(ex, ey, cell * 0.9, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#3fb950';
+    ctx.beginPath();
+    ctx.arc(ex, ey, cell * 0.35, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(ex, ey, cell * 0.15, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Particles
+    for (const p of particles) {
+      const a = p.life / p.maxLife;
+      ctx.fillStyle = 'rgba(88,166,255,' + (a * 0.5) + ')';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * a, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Player
+    const px = (player.x + 0.5) * cell;
+    const py = (player.y + 0.5) * cell;
+    // Glow
+    const grad = ctx.createRadialGradient(px, py, 0, px, py, cell * 0.8);
+    grad.addColorStop(0, 'rgba(88,166,255,0.35)');
+    grad.addColorStop(1, 'rgba(88,166,255,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(px, py, cell * 0.8, 0, Math.PI * 2);
+    ctx.fill();
+    // Body
+    ctx.fillStyle = '#58a6ff';
+    ctx.beginPath();
+    ctx.arc(px, py, cell * 0.32, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(px, py, cell * 0.14, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Fog vignette (radial darkness around player when fog on)
+    if (fogOn) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'source-over';
+      const vg = ctx.createRadialGradient(px, py, cell * FOG_RADIUS * 0.8, px, py, cell * FOG_RADIUS * 2.2);
+      vg.addColorStop(0, 'rgba(8,11,16,0)');
+      vg.addColorStop(1, 'rgba(8,11,16,0.55)');
+      ctx.fillStyle = vg;
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+    }
+  }
+
+  function drawMini() {
+    if (!miniOn) { miniCanvas.style.display = 'none'; return; }
+    miniCanvas.style.display = 'block';
+    const ms = 100;
+    const mw = ms / cols;
+    const mh = ms / rows;
+    mctx.clearRect(0, 0, ms, ms);
+    mctx.fillStyle = '#0a0e14';
+    mctx.fillRect(0, 0, ms, ms);
+
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        const isVisible = !fogOn || seen[y][x];
+        if (!isVisible) continue;
+        mctx.fillStyle = '#1e2a3a';
+        mctx.fillRect(x * mw, y * mh, mw, mh);
+        const w = walls[y][x];
+        mctx.strokeStyle = '#4a5a70';
+        mctx.lineWidth = 1;
+        mctx.beginPath();
+        if (w.top) { mctx.moveTo(x * mw, y * mh); mctx.lineTo((x + 1) * mw, y * mh); }
+        if (w.right) { mctx.moveTo((x + 1) * mw, y * mh); mctx.lineTo((x + 1) * mw, (y + 1) * mh); }
+        if (w.bottom) { mctx.moveTo(x * mw, (y + 1) * mh); mctx.lineTo((x + 1) * mw, (y + 1) * mh); }
+        if (w.left) { mctx.moveTo(x * mw, y * mh); mctx.lineTo(x * mw, (y + 1) * mh); }
+        mctx.stroke();
+      }
+    }
+    // Exit on minimap
+    mctx.fillStyle = '#3fb950';
+    mctx.fillRect(exitCell.x * mw, exitCell.y * mh, mw, mh);
+    // Player on minimap
+    mctx.fillStyle = '#58a6ff';
+    mctx.fillRect(player.x * mw - 1, player.y * mh - 1, mw + 2, mh + 2);
+  }
+
+  // ---------- Game loop ----------
+  let lastTime = 0;
+  function loop(ts) {
+    const dt = Math.min((ts - lastTime) / 1000, 0.1);
+    lastTime = ts;
+    animT += dt;
+    if (running) {
+      elapsed = (performance.now() - startTime) / 1000;
+      timerEl.textContent = fmtTime(elapsed);
+    }
+    updateParticles(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- Start / restart ----------
+  function startGame() {
+    overlay.classList.add('hidden');
+    running = true;
+    startTime = performance.now();
+    elapsed = 0;
+    timerEl.textContent = '0.0';
+  }
+
+  function newMaze() {
+    setup();
+    startGame();
+  }
+
+  function restartMaze() {
+    // Same maze, reset player
+    player = { x: 0, y: 0 };
+    seen = Array.from({ length: rows }, () => new Array(cols).fill(0));
+    revealAround(0, 0);
+    particles = [];
+    overlay.classList.add('hidden');
+    running = true;
+    startTime = performance.now();
+    elapsed = 0;
+    timerEl.textContent = '0.0';
+    draw();
+    drawMini();
+  }
+
+  // ---------- Input: keyboard ----------
+  const keyMap = {
+    ArrowUp: [0, -1], KeyW: [0, -1],
+    ArrowDown: [0, 1], KeyS: [0, 1],
+    ArrowLeft: [-1, 0], KeyA: [-1, 0],
+    ArrowRight: [1, 0], KeyD: [1, 0],
+  };
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'n' || e.key === 'N') { newMaze(); return; }
+    if (e.key === 'f' || e.key === 'F') { fogToggle.checked = !fogToggle.checked; fogOn = fogToggle.checked; draw(); return; }
+    if (e.key === 'm' || e.key === 'M') { miniToggle.checked = !miniToggle.checked; miniOn = miniToggle.checked; drawMini(); return; }
+    const d = keyMap[e.code];
+    if (d) {
+      e.preventDefault();
+      tryMove(d[0], d[1]);
+    }
+    if (e.key === 'Enter' && !running) {
+      if (overlay.classList.contains('hidden')) return;
+      startGame();
+    }
+  });
+
+  // ---------- Input: swipe ----------
+  let touchStartX = 0, touchStartY = 0, touchTracking = false;
+  const SWIPE_MIN = 24;
+  canvas.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) return;
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    touchTracking = true;
+  }, { passive: true });
+
+  canvas.addEventListener('touchmove', (e) => {
+    if (!touchTracking) return;
+    e.preventDefault();
+  }, { passive: false });
+
+  canvas.addEventListener('touchend', (e) => {
+    if (!touchTracking) return;
+    touchTracking = false;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touchStartX;
+    const dy = t.clientY - touchStartY;
+    if (Math.abs(dx) < SWIPE_MIN && Math.abs(dy) < SWIPE_MIN) return;
+    if (Math.abs(dx) > Math.abs(dy)) {
+      tryMove(dx > 0 ? 1 : -1, 0);
+    } else {
+      tryMove(0, dy > 0 ? 1 : -1);
+    }
+  }, { passive: true });
+
+  // ---------- Buttons ----------
+  sizeSelect.addEventListener('change', () => {
+    sizeKey = sizeSelect.value;
+    newMaze();
+  });
+  fogToggle.addEventListener('change', () => { fogOn = fogToggle.checked; draw(); });
+  miniToggle.addEventListener('change', () => { miniOn = miniToggle.checked; drawMini(); });
+  newBtn.addEventListener('click', newMaze);
+  restartBtn.addEventListener('click', restartMaze);
+  ovBtn.addEventListener('click', () => {
+    if (running) return;
+    startGame();
+  });
+
+  // ---------- Resize ----------
+  window.addEventListener('resize', () => {
+    // Re-fit canvas without regenerating maze
+    const cfg = SIZES[sizeKey];
+    const stage = document.getElementById('stage');
+    const maxW = Math.min(stage.clientWidth - 16, 500);
+    const maxH = Math.min(stage.clientHeight - 16, 500);
+    const baseCell = cfg.cell;
+    let px = cols * baseCell;
+    let py = rows * baseCell;
+    const scale = Math.min(maxW / px, maxH / py, 1);
+    cell = Math.max(6, Math.floor(baseCell * scale));
+    canvas.width = cols * cell;
+    canvas.height = rows * cell;
+    draw();
+  });
+
+  // ---------- Init ----------
+  setup();
+  requestAnimationFrame((ts) => { lastTime = ts; loop(ts); });
+})();
+</script>
+</body>
+</html>
